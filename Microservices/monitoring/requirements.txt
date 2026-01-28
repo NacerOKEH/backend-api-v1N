@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+pymongo
+pika
+python-socketio
+python-dotenv
+scikit-learn
+numpy
+requests
+pandas

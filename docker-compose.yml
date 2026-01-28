@@ -1,33 +1,114 @@
-services:
-  backend:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: auth-ms
-    environment:
-      - SERVER_DB=db
-      - NAME_DB=${NAME_DB-db_auth}
-    ports:
-      - 8000:8000
-    volumes:
-      - ./logs:/app/logs
-    networks:
-      - net-auth
-    depends_on:
-      - db
-  db:
-    image: postgres:alpine
-    container_name: postgresql
-    environment:
-      - POSTGRES_USER=${USER_DB-admin}
-      - POSTGRES_PASSWORD=${PASSWORD_DB-1234}
-    ports:
-      - 5432:5432
-    networks:
-      - net-auth
-    volumes:
-      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
-networks:
-  net-auth:
-    driver: bridge
+version: '3.8'
 
+services:
+  # Databases
+  postgres:
+    image: postgres:15-alpine
+    container_name: postgres
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: device_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./Microservices/signing/init.sql:/docker-entrypoint-initdb.d/init.sql
+
+  mongo:
+    image: mongo:6.0
+    container_name: mongo
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+
+  # Brokers
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: mosquitto
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - ./mosquitto/config:/mosquitto/config
+      - ./mosquitto/data:/mosquitto/data
+      - ./mosquitto/log:/mosquitto/log
+
+  # Services
+  device-management:
+    build:
+      context: ./Microservices/device-management
+      dockerfile: dockers/Dockerfile
+    container_name: device-management
+    restart: always
+    depends_on:
+      - postgres
+      - rabbitmq
+      - mosquitto
+    environment:
+      SERVER_DB: postgres
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: password
+      NAME_DB: device_db
+      RABBITMQ_HOST: rabbitmq
+      MQTT_HOST: mosquitto
+    ports:
+      - "8001:8001"
+
+  monitoring:
+    build:
+      context: ./Microservices/monitoring
+      dockerfile: dockers/Dockerfile
+    container_name: monitoring
+    restart: always
+    depends_on:
+      - mongo
+      - rabbitmq
+    environment:
+      MONGO_URL: mongodb://mongo:27017
+      RABBITMQ_HOST: rabbitmq
+    ports:
+      - "8002:8002"
+
+  signing:
+    build:
+      context: ./Microservices/signing
+    container_name: signing
+    restart: always
+    depends_on:
+      - postgres
+    environment:
+      SERVER_DB: postgres
+      USER_DB: admin
+      PASSWORD_DB: password
+      NAME_DB: db_auth
+    ports:
+      - "8000:8000"
+
+  simulator:
+    build:
+      context: ./iot-devices
+    container_name: simulator
+    restart: always
+    depends_on:
+      - mosquitto
+    environment:
+      MQTT_BROKER: mosquitto
+
+volumes:
+  postgres_data:
+  mongo_data:
+  rabbitmq_data:
