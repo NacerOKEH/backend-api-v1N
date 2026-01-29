@@ -21,6 +21,7 @@ class Device(Base):
     ip_address = Column(String, nullable=True)
     mac_address = Column(String, nullable=True)
     firmware_version = Column(String, nullable=True)
+    city = Column(String, nullable=True)
     
     # Location fields (simplified for now, could be a separate table/relation)
     latitude = Column(String, nullable=True)

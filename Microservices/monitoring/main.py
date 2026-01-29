@@ -42,42 +42,26 @@ async def startup_event():
     # The consumer is in a thread, so it can't await. 
     # We will redefine Consumer to accept a loop.
     loop = asyncio.get_running_loop()
-    
-    class AsyncConsumer(DeviceEventConsumer):
-        def __init__(self, sio, loop):
-            super().__init__(sio)
-            self.loop = loop
+    print("STARTUP: Monitoring Service Starting...")
 
-        def emit_device_update(self, event_data, routing_key):
-             # This method replaces the direct self.sio.emit call in the parent class
-             asyncio.run_coroutine_threadsafe(self.sio.emit('device_update', {'type': routing_key, 'data': event_data}), self.loop)
-
-    consumer = AsyncConsumer(sio, loop)
-    
-    # We also need to monkeypatch the callback in the parent or change the parent to call a method we can override.
-    # Looking at consumer.py: calls self.sio.emit(...) directly.
-    # So we MUST monkeypatch it on the instance, but NOT by calling self.sio.emit inside the lambda.
-    
-    # Correct approach:
-    # 1. Define the async emitter function
-    def thread_safe_emit(event, data):
-        asyncio.run_coroutine_threadsafe(sio.emit(event, data), loop)
-        
-    # 2. Assign this function to the consumer instance's sio component, essentially mocking it partially.
-    # BUT sio is the actual AsyncServer object. We can't overwrite .emit on it if we want to use it.
-    
-    # Better: wrapping sio.
+    # Wrapper to bridge sync consumer thread -> async sio emit
     class SioWrapper:
         def __init__(self, original_sio, loop):
             self.original_sio = original_sio
             self.loop = loop
             
         def emit(self, event, data):
-             asyncio.run_coroutine_threadsafe(self.original_sio.emit(event, data), self.loop)
+            # Schedule the coroutine in the main event loop
+            asyncio.run_coroutine_threadsafe(self.original_sio.emit(event, data), self.loop)
              
-    # Pass the wrapper to the consumer instead of the raw sio
-    consumer = DeviceEventConsumer(SioWrapper(sio, loop))
-    consumer.start()
+    # Start Consumer
+    try:
+        print("STARTUP: Initializing DeviceEventConsumer...")
+        consumer = DeviceEventConsumer(SioWrapper(sio, loop))
+        consumer.start()
+        print("STARTUP: DeviceEventConsumer started.")
+    except Exception as e:
+        print(f"STARTUP ERROR: Could not start consumer: {e}")
 
 @sio.event
 async def connect(sid, environ):

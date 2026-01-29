@@ -17,6 +17,7 @@ class DeviceDAL:
             firmware_version=device.firmware_version,
             latitude=device.latitude,
             longitude=device.longitude,
+            city=device.city,
             status=DeviceStatus.OFFLINE
         )
         self.db.add(db_device)

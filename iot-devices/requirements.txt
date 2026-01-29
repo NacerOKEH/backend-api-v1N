@@ -1,2 +1,5 @@
 paho-mqtt
 python-dotenv
+pika
+requests
+psutil

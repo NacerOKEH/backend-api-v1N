@@ -15,6 +15,7 @@ class DeviceBase(BaseModel):
     ip_address: Optional[str] = None
     mac_address: Optional[str] = None
     firmware_version: Optional[str] = None
+    city: Optional[str] = None
     latitude: Optional[str] = None
     longitude: Optional[str] = None
 
@@ -26,6 +27,7 @@ class DeviceUpdate(BaseModel):
     status: Optional[DeviceStatus] = None
     ip_address: Optional[str] = None
     firmware_version: Optional[str] = None
+    city: Optional[str] = None
     last_seen: Optional[datetime] = None
 
 class DeviceResponse(DeviceBase):

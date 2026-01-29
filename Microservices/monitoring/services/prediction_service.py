@@ -40,9 +40,10 @@ class PredictionService:
     def predict_temperature(self, city: str):
         coords = self.city_coords.get(city, self.city_coords["Unknown"])
         
-        # 1. Fetch 7-Day Forecast from Open-Meteo
+        # 1. Fetch 7-Day Forecast & Hourly Data from Open-Meteo
         # daily=temperature_2m_max,temperature_2m_min,weathercode
-        url = f"https://api.open-meteo.com/v1/forecast?latitude={coords['lat']}&longitude={coords['lon']}&daily=temperature_2m_max,temperature_2m_min,weathercode&timezone=auto"
+        # hourly=temperature_2m,relative_humidity_2m
+        url = f"https://api.open-meteo.com/v1/forecast?latitude={coords['lat']}&longitude={coords['lon']}&daily=temperature_2m_max,temperature_2m_min,weathercode&hourly=temperature_2m,relative_humidity_2m&timezone=auto"
         
         try:
             response = requests.get(url)
@@ -54,9 +55,15 @@ class PredictionService:
             min_temps = daily.get("temperature_2m_min", [])
             codes = daily.get("weathercode", [])
             
+            hourly = data.get("hourly", {})
+            h_times = hourly.get("time", [])
+            h_temps = hourly.get("temperature_2m", [])
+            h_humidity = hourly.get("relative_humidity_2m", [])
+
             if not times:
                 return {"error": "External API connection failed"}
 
+            # Process Daily Forecast
             forecast = []
             for i in range(len(times)):
                 forecast.append({
@@ -66,11 +73,27 @@ class PredictionService:
                     "condition": self.get_weather_condition(codes[i])
                 })
 
+            # Process Hourly Forecast (Next 24 hours)
+            hourly_forecast = []
+            # We'll take the first 24 hours from the response
+            limit = min(len(h_times), 24)
+            for i in range(limit):
+                # Format time to be more readable (e.g., "14:00")
+                dt = datetime.fromisoformat(h_times[i])
+                time_str = dt.strftime("%H:%M")
+                
+                hourly_forecast.append({
+                    "time": time_str,
+                    "temperature": h_temps[i],
+                    "humidity": h_humidity[i]
+                })
+
             return {
                 "city": city,
                 "latitude": coords['lat'],
                 "longitude": coords['lon'],
-                "weekly_forecast": forecast
+                "weekly_forecast": forecast,
+                "hourly_forecast": hourly_forecast
             }
 
         except Exception as e:

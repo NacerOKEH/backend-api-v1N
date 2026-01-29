@@ -105,8 +105,10 @@ services:
     restart: always
     depends_on:
       - mosquitto
+      - device-management
     environment:
       MQTT_BROKER: mosquitto
+      DEVICE_API_URL: http://device-management:8001
 
 volumes:
   postgres_data:
