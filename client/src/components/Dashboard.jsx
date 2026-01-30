@@ -9,7 +9,7 @@ import '../App.css'
 const socket = io('http://localhost:8002');
 
 const PREDEFINED_CITIES = [
-    "Local", "Fes", "Casablanca", "Rabat", "Marrakech", "Tanger", "Agadir",
+    "All", "Local", "Fes", "Casablanca", "Rabat", "Marrakech", "Tanger", "Agadir",
     "Paris", "London", "New York", "Tokyo", "Berlin", "Madrid"
 ];
 
@@ -25,12 +25,17 @@ function Dashboard() {
 
     // State for selected specific device (for "Online" status and focused data)
     const [selectedDevice, setSelectedDevice] = useState(null)
+    const [searchQuery, setSearchQuery] = useState('')
 
     const [newDevice, setNewDevice] = useState({ name: '', city: PREDEFINED_CITIES[0], type: 'Sensor' })
 
     // Edit Mode State
     const [editingId, setEditingId] = useState(null);
     const [editFormData, setEditFormData] = useState({});
+
+    // ...
+
+
 
     const navigate = useNavigate();
 
@@ -43,7 +48,12 @@ function Dashboard() {
 
     // Sync Form City with Filter City for better UX
     useEffect(() => {
-        setNewDevice(prev => ({ ...prev, city: selectedCity }))
+        if (selectedCity === 'All') {
+            // Default to first valid city (Casablanca) if All is selected
+            setNewDevice(prev => ({ ...prev, city: 'Casablanca' }))
+        } else {
+            setNewDevice(prev => ({ ...prev, city: selectedCity }))
+        }
     }, [selectedCity])
 
     const handleCreateDevice = () => {
@@ -181,6 +191,8 @@ function Dashboard() {
                 .then(res => res.json())
                 .then(data => setForecast(data))
                 .catch(err => console.error("Forecast error:", err))
+        } else {
+            setForecast(null); // Clear forecast if 'All' is selected or no specific device
         }
     }, [selectedCity, selectedDevice])
 
@@ -195,13 +207,15 @@ function Dashboard() {
     }
 
     // --- FILTER LOGIC ---
-    // List Filter: Show only devices in selected city
-    const filteredDevices = devices.filter(d => d.city === selectedCity)
+    // List Filter: Show only devices in selected city OR search query matches globally OR 'All' is selected
+    const filteredDevices = searchQuery
+        ? devices.filter(d => d.name.toLowerCase().includes(searchQuery.toLowerCase()))
+        : (selectedCity === 'All' ? devices : devices.filter(d => d.city === selectedCity))
 
     // Chart Filter: Show telemetry for selected Device OR selected City
     const filteredData = selectedDevice
         ? deviceData.filter(d => d.device_id === selectedDevice.device_id)
-        : deviceData.filter(d => d.city === selectedCity)
+        : (selectedCity === 'All' ? deviceData : deviceData.filter(d => d.city === selectedCity))
 
     // Debug Chart Data
     if (selectedDevice && filteredData.length === 0 && deviceData.length > 0) {
@@ -230,14 +244,27 @@ function Dashboard() {
                 Status: <span style={{ color: isConnected ? 'green' : 'red' }}>{isConnected ? 'Connected' : 'Disconnected'}</span>
             </div>
 
-            {/* City Filter Control - Always visible if no device selected */}
+            {/* City Filter Control & Search - Always visible if no device selected */}
             {!selectedDevice && (
-                <div className="filter-controls" style={{ marginBottom: '20px', padding: '10px', background: '#f5f5f5', borderRadius: '8px' }}>
-                    <label style={{ marginRight: '10px', fontWeight: 'bold' }}>Filter by City: </label>
-                    <select value={selectedCity} onChange={(e) => setSelectedCity(e.target.value)} style={{ padding: '5px' }}>
-                        {/* Show PREDEFINED cities so user can navigate even if no devices */}
-                        {PREDEFINED_CITIES.map(city => <option key={city} value={city}>{city}</option>)}
-                    </select>
+                <div className="filter-controls" style={{ marginBottom: '20px', padding: '10px', background: '#f5f5f5', borderRadius: '8px', display: 'flex', gap: '20px', alignItems: 'center' }}>
+
+                    <div>
+                        <label style={{ marginRight: '10px', fontWeight: 'bold' }}>Filter by City: </label>
+                        <select value={selectedCity} onChange={(e) => setSelectedCity(e.target.value)} style={{ padding: '5px' }}>
+                            {/* Show PREDEFINED cities so user can navigate even if no devices */}
+                            {PREDEFINED_CITIES.map(city => <option key={city} value={city}>{city}</option>)}
+                        </select>
+                    </div>
+
+                    <div style={{ flex: 1 }}>
+                        <input
+                            type="text"
+                            placeholder="Search device globally..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            style={{ width: '100%', padding: '6px', borderRadius: '4px', border: '1px solid #ccc' }}
+                        />
+                    </div>
                 </div>
             )}
 
@@ -398,7 +425,7 @@ function Dashboard() {
                                 onChange={e => setNewDevice({ ...newDevice, city: e.target.value })}
                                 style={{ width: '100%', marginBottom: '10px', padding: '0.8rem', borderRadius: '4px', border: '1px solid #475569', background: 'rgba(255,255,255,0.05)', color: 'white' }}
                             >
-                                {PREDEFINED_CITIES.filter(c => c !== "Local").map(c => <option key={c} value={c}>{c}</option>)}
+                                {PREDEFINED_CITIES.filter(c => c !== "Local" && c !== "All").map(c => <option key={c} value={c}>{c}</option>)}
                             </select>
                             <button onClick={handleCreateDevice}>+ Add Device</button>
                         </div>
@@ -414,41 +441,50 @@ function Dashboard() {
                     <h2>
                         {selectedDevice
                             ? `System Monitor: ${selectedDevice.name}`
-                            : `Hourly Forecast & Overview (${selectedCity})`
+                            : (selectedCity === 'All' ? "Global Overview" : `Hourly Forecast & Overview (${selectedCity})`)
                         }
                     </h2>
-                    <div style={{ width: '100%', height: 300 }}>
-                        <ResponsiveContainer>
-                            <LineChart data={chartData}>
-                                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
-                                <XAxis dataKey="time" stroke="#94a3b8" fontSize={12} tickLine={false} />
-                                <YAxis stroke="#94a3b8" fontSize={12} tickLine={false} />
-                                <Tooltip
-                                    contentStyle={{
-                                        backgroundColor: 'rgba(30, 41, 59, 0.9)',
-                                        border: '1px solid rgba(255,255,255,0.1)',
-                                        borderRadius: '8px',
-                                        color: '#f1f5f9'
-                                    }}
-                                    itemStyle={{ color: '#f1f5f9' }}
-                                />
-                                <Legend wrapperStyle={{ paddingTop: '10px' }} />
 
-                                {selectedDevice ? (
-                                    <>
-                                        <Line type="monotone" dataKey="cpu_usage" stroke="#8b5cf6" strokeWidth={2} dot={false} activeDot={{ r: 6 }} name="CPU (%)" />
-                                        <Line type="monotone" dataKey="ram_usage" stroke="#f59e0b" strokeWidth={2} dot={false} name="RAM (%)" />
-                                        <Line type="monotone" dataKey="disk_usage" stroke="#10b981" strokeWidth={2} dot={false} name="Disk (%)" />
-                                    </>
-                                ) : (
-                                    <>
-                                        <Line type="monotone" dataKey="temperature" stroke="#3b82f6" strokeWidth={2} dot={false} activeDot={{ r: 6 }} name="Temp (°C)" />
-                                        <Line type="monotone" dataKey="humidity" stroke="#10b981" strokeWidth={2} dot={false} name="Humidity (%)" />
-                                    </>
-                                )}
-                            </LineChart>
-                        </ResponsiveContainer>
-                    </div>
+                    {/* Hide Chart if in All mode and no device selected */}
+                    {(selectedCity === 'All' && !selectedDevice) ? (
+                        <div style={{ width: '100%', height: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontStyle: 'italic', flexDirection: 'column' }}>
+                            <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🌍</div>
+                            <div>Select a specific device to view details.</div>
+                        </div>
+                    ) : (
+                        <div style={{ width: '100%', height: 300 }}>
+                            <ResponsiveContainer>
+                                <LineChart data={chartData}>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
+                                    <XAxis dataKey="time" stroke="#94a3b8" fontSize={12} tickLine={false} />
+                                    <YAxis stroke="#94a3b8" fontSize={12} tickLine={false} />
+                                    <Tooltip
+                                        contentStyle={{
+                                            backgroundColor: 'rgba(30, 41, 59, 0.9)',
+                                            border: '1px solid rgba(255,255,255,0.1)',
+                                            borderRadius: '8px',
+                                            color: '#f1f5f9'
+                                        }}
+                                        itemStyle={{ color: '#f1f5f9' }}
+                                    />
+                                    <Legend wrapperStyle={{ paddingTop: '10px' }} />
+
+                                    {selectedDevice ? (
+                                        <>
+                                            <Line type="monotone" dataKey="cpu_usage" stroke="#8b5cf6" strokeWidth={2} dot={false} activeDot={{ r: 6 }} name="CPU (%)" />
+                                            <Line type="monotone" dataKey="ram_usage" stroke="#f59e0b" strokeWidth={2} dot={false} name="RAM (%)" />
+                                            <Line type="monotone" dataKey="disk_usage" stroke="#10b981" strokeWidth={2} dot={false} name="Disk (%)" />
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Line type="monotone" dataKey="temperature" stroke="#3b82f6" strokeWidth={2} dot={false} activeDot={{ r: 6 }} name="Temp (°C)" />
+                                            <Line type="monotone" dataKey="humidity" stroke="#10b981" strokeWidth={2} dot={false} name="Humidity (%)" />
+                                        </>
+                                    )}
+                                </LineChart>
+                            </ResponsiveContainer>
+                        </div>
+                    )}
                 </div>
             </div>
 
