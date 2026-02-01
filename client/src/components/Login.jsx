@@ -32,8 +32,8 @@ function Login() {
             if (response.ok) {
                 if (isLogin) {
                     // Login Success
-                    localStorage.setItem('token', data.token);
-                    localStorage.setItem('user', JSON.stringify(data.payload));
+                    sessionStorage.setItem('token', data.token);
+                    sessionStorage.setItem('user', JSON.stringify(data.payload));
                     navigate('/dashboard');
                 } else {
                     // Register Success
@@ -69,14 +69,14 @@ function Login() {
             justifyContent: 'center',
             alignItems: 'center',
             height: '100vh',
-            background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
-            color: 'white'
+            background: 'var(--bg-primary)',
+            color: 'var(--text-primary)'
         }}>
             <div className="card" style={{ width: '400px', textAlign: 'center' }}>
-                <h2 style={{ marginBottom: '2rem', color: '#3b82f6' }}>{isLogin ? 'Sign In' : 'Create Account'}</h2>
+                <h2 style={{ marginBottom: '2rem', color: 'var(--accent-primary)' }}>{isLogin ? 'Sign In' : 'Create Account'}</h2>
 
-                {error && <div style={{ color: '#ef4444', marginBottom: '1rem', background: 'rgba(239, 68, 68, 0.1)', padding: '0.5rem', borderRadius: '4px' }}>{error}</div>}
-                {successMsg && <div style={{ color: '#10b981', marginBottom: '1rem', background: 'rgba(16, 185, 129, 0.1)', padding: '0.5rem', borderRadius: '4px' }}>{successMsg}</div>}
+                {error && <div style={{ color: 'var(--error)', marginBottom: '1rem', background: 'rgba(239, 68, 68, 0.1)', padding: '0.5rem', borderRadius: '4px' }}>{error}</div>}
+                {successMsg && <div style={{ color: 'var(--success)', marginBottom: '1rem', background: 'rgba(16, 185, 129, 0.1)', padding: '0.5rem', borderRadius: '4px' }}>{successMsg}</div>}
 
                 <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                     <input
@@ -85,7 +85,13 @@ function Login() {
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
                         required
-                        style={{ padding: '0.8rem', borderRadius: '4px', border: '1px solid #475569', background: 'rgba(255,255,255,0.05)', color: 'white' }}
+                        style={{
+                            padding: '0.8rem',
+                            borderRadius: '4px',
+                            border: '1px solid var(--border-color)',
+                            background: 'var(--bg-secondary)',
+                            color: 'var(--text-primary)'
+                        }}
                     />
                     <input
                         type="password"
@@ -94,7 +100,13 @@ function Login() {
                         onChange={(e) => setPassword(e.target.value)}
                         required
                         minLength={6}
-                        style={{ padding: '0.8rem', borderRadius: '4px', border: '1px solid #475569', background: 'rgba(255,255,255,0.05)', color: 'white' }}
+                        style={{
+                            padding: '0.8rem',
+                            borderRadius: '4px',
+                            border: '1px solid var(--border-color)',
+                            background: 'var(--bg-secondary)',
+                            color: 'var(--text-primary)'
+                        }}
                     />
                     <button
                         type="submit"
@@ -103,7 +115,7 @@ function Login() {
                             padding: '0.8rem',
                             borderRadius: '4px',
                             border: 'none',
-                            background: loading ? '#64748b' : '#3b82f6',
+                            background: loading ? 'var(--text-secondary)' : 'var(--accent-primary)',
                             color: 'white',
                             fontWeight: 'bold',
                             cursor: loading ? 'not-allowed' : 'pointer'
@@ -113,18 +125,18 @@ function Login() {
                     </button>
                 </form>
 
-                <div style={{ marginTop: '1.5rem', fontSize: '0.9rem', color: '#94a3b8' }}>
+                <div style={{ marginTop: '1.5rem', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
                     {isLogin ? "Don't have an account? " : "Already have an account? "}
                     <span
                         onClick={() => setIsLogin(!isLogin)}
-                        style={{ color: '#3b82f6', cursor: 'pointer', fontWeight: 'bold' }}
+                        style={{ color: 'var(--accent-primary)', cursor: 'pointer', fontWeight: 'bold' }}
                     >
                         {isLogin ? 'Sign Up' : 'Sign In'}
                     </span>
                 </div>
 
                 {isLogin && (
-                    <div style={{ marginTop: '1rem', fontSize: '0.8rem', color: '#64748b' }}>
+                    <div style={{ marginTop: '1rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
                         <p>Demo: admin@admin.com / 1234</p>
                     </div>
                 )}

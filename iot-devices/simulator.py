@@ -38,11 +38,42 @@ def fetch_devices():
         response = requests.get(f"{DEVICE_API_URL}/devices/")
         if response.status_code == 200:
             devices = response.json()
-            # Convert to dict format {id: city}
-            return {d['device_id']: d.get('city', 'Unknown') for d in devices}
+            # Convert to dict format {id: {city, name}}
+            return {d['device_id']: {'city': d.get('city', 'Unknown'), 'name': d.get('name')} for d in devices}
     except Exception as e:
         print(f"Error fetching devices: {e}")
     return {}
+
+def ensure_host_device():
+    """Ensure a Host PC device exists"""
+    try:
+        devices = fetch_devices()
+        # Check if already exists
+        for dev_id, info in devices.items():
+            if info['name'] == "Host PC":
+                print(f"Found existing Host PC: {dev_id}")
+                return dev_id
+
+        # Create if not exists
+        print("Creating Host PC device...")
+        payload = {
+            "name": "Host PC",
+            "type": "Server",
+            "city": "Local",
+            "ip_address": "127.0.0.1",
+            "mac_address": "00:00:00:00:00:00",
+            "firmware_version": "v1.0",
+            "latitude": "0",
+            "longitude": "0"
+        }
+        res = requests.post(f"{DEVICE_API_URL}/devices/", json=payload)
+        if res.status_code == 200 or res.status_code == 201:
+            data = res.json()
+            print(f"Created Host PC: {data['device_id']}")
+            return data['device_id']
+    except Exception as e:
+        print(f"Error ensuring host device: {e}")
+    return None
 
 def main():
     connection = get_connection()
@@ -59,24 +90,28 @@ def main():
             if not active_devices:
                 print("No devices found. Waiting...")
             
-            for device_id, city in active_devices.items():
-                
-                # Get base stats from psutil (host stats)
-                base_cpu = psutil.cpu_percent(interval=None)
-                base_ram = psutil.virtual_memory().percent
+            for device_id, info in active_devices.items():
+                city = info['city']
+                name = info['name']
+
+                # SKIP Host PC (Logic moved to end-devices/local_monitor.py)
+                if city == 'Local' or name == 'Host PC':
+                    continue
                 
                 # Randomize per device to make them distinct
-                # Add random offset (-10 to +10)
-                device_cpu = max(0, min(100, base_cpu + random.uniform(-10, 10)))
-                device_ram = max(0, min(100, base_ram + random.uniform(-5, 5)))
+                # We simulate environmental data + some base noise for system stats (optional)
+                device_cpu = round(random.uniform(5, 30), 1)
+                device_ram = round(random.uniform(20, 60), 1)
+                device_disk = round(random.uniform(10, 40), 1)
 
                 payload = {
                     "device_id": device_id,
                     "city": city or "Unknown",
                     "temperature": round(random.uniform(5.0, 45.0), 2),
                     "humidity": round(random.uniform(20.0, 90.0), 2),
-                    "cpu_usage": round(device_cpu, 1),
-                    "ram_usage": round(device_ram, 1),
+                    "cpu_usage": device_cpu,
+                    "ram_usage": device_ram,
+                    "disk_usage": device_disk,
                     "timestamp": time.time()
                 }
                 
@@ -88,9 +123,9 @@ def main():
                     routing_key=routing_key,
                     body=json.dumps(payload)
                 )
-                print(f"[>] Published for {device_id} ({city})")
+                print(f"[>] Published for {name} ({city})")
                 
-            time.sleep(10) # Wait 10s between cycles
+            time.sleep(5) 
     except KeyboardInterrupt:
         print("Stopping simulation")
         connection.close()

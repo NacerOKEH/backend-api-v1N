@@ -41,8 +41,8 @@ function Dashboard() {
 
     // Logout function
     const handleLogout = () => {
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
+        sessionStorage.removeItem('token');
+        sessionStorage.removeItem('user');
         navigate('/login');
     };
 
@@ -141,7 +141,7 @@ function Dashboard() {
 
     useEffect(() => {
         // Auth Check
-        const token = localStorage.getItem('token');
+        const token = sessionStorage.getItem('token');
         if (!token) {
             navigate('/login');
             return;
@@ -212,6 +212,9 @@ function Dashboard() {
         ? devices.filter(d => d.name.toLowerCase().includes(searchQuery.toLowerCase()))
         : (selectedCity === 'All' ? devices : devices.filter(d => d.city === selectedCity))
 
+    const endDevices = filteredDevices.filter(d => d.city === 'Local');
+    const iotDevices = filteredDevices.filter(d => d.city !== 'Local');
+
     // Chart Filter: Show telemetry for selected Device OR selected City
     const filteredData = selectedDevice
         ? deviceData.filter(d => d.device_id === selectedDevice.device_id)
@@ -246,23 +249,22 @@ function Dashboard() {
 
             {/* City Filter Control & Search - Always visible if no device selected */}
             {!selectedDevice && (
-                <div className="filter-controls" style={{ marginBottom: '20px', padding: '10px', background: '#f5f5f5', borderRadius: '8px', display: 'flex', gap: '20px', alignItems: 'center' }}>
-
+                <div className="filter-controls">
                     <div>
                         <label style={{ marginRight: '10px', fontWeight: 'bold' }}>Filter by City: </label>
-                        <select value={selectedCity} onChange={(e) => setSelectedCity(e.target.value)} style={{ padding: '5px' }}>
+                        <select value={selectedCity} onChange={(e) => setSelectedCity(e.target.value)}>
                             {/* Show PREDEFINED cities so user can navigate even if no devices */}
                             {PREDEFINED_CITIES.map(city => <option key={city} value={city}>{city}</option>)}
                         </select>
                     </div>
 
-                    <div style={{ flex: 1 }}>
+                    <div className="search-wrapper">
                         <input
                             type="text"
-                            placeholder="Search device globally..."
+                            placeholder="🔍 Search device globally..."
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
-                            style={{ width: '100%', padding: '6px', borderRadius: '4px', border: '1px solid #ccc' }}
+                            className="search-input"
                         />
                     </div>
                 </div>
@@ -277,8 +279,8 @@ function Dashboard() {
                 </div>
             )}
 
-            {/* SYSTEM STATS CARDS (CPU/RAM/DISK) - Only if Device Selected */}
-            {selectedDevice && (
+            {/* STATS CARDS - DYNAMIC BASED ON DEVICE TYPE */}
+            {selectedDevice && selectedDevice.city === 'Local' && (
                 <div className="stats-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '15px' }}>
                     <div className="stat-card" style={{ background: 'rgba(139, 92, 246, 0.1)', border: '1px solid #8b5cf6', padding: '15px', borderRadius: '8px' }}>
                         <h3 style={{ color: '#a78bfa', margin: '0 0 10px 0' }}>CPU Usage</h3>
@@ -312,94 +314,155 @@ function Dashboard() {
                 </div>
             )}
 
+            {selectedDevice && selectedDevice.city !== 'Local' && (
+                <div className="stats-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '15px' }}>
+                    <div className="stat-card" style={{ background: 'rgba(59, 130, 246, 0.1)', border: '1px solid #3b82f6', padding: '15px', borderRadius: '8px' }}>
+                        <h3 style={{ color: '#60a5fa', margin: '0 0 10px 0' }}>Temperature</h3>
+                        <div style={{ fontSize: '2em', fontWeight: 'bold', color: '#fff' }}>
+                            {latestTelemetry ? `${latestTelemetry.temperature}°C` : '...'}
+                        </div>
+                    </div>
+
+                    <div className="stat-card" style={{ background: 'rgba(16, 185, 129, 0.1)', border: '1px solid #10b981', padding: '15px', borderRadius: '8px' }}>
+                        <h3 style={{ color: '#34d399', margin: '0 0 10px 0' }}>Humidity</h3>
+                        <div style={{ fontSize: '2em', fontWeight: 'bold', color: '#fff' }}>
+                            {latestTelemetry ? `${latestTelemetry.humidity}%` : '...'}
+                        </div>
+                    </div>
+                </div>
+            )}
+
 
             <div className="grid">
                 <div className="card">
                     <h2>Devices ({selectedCity})</h2>
-                    <ul>
-                        {filteredDevices.length === 0 && <p style={{ opacity: 0.5, fontStyle: 'italic' }}>No devices in {selectedCity}</p>}
+                    {/* END DEVICES SECTION */}
+                    {endDevices.length > 0 && (
+                        <div className="device-category">
+                            <div className="section-header">
+                                <span style={{ fontSize: '1.2em' }}>💻</span>
+                                <h3>End Devices (Local)</h3>
+                            </div>
+                            <ul>
+                                {endDevices.map(d => {
+                                    const isSelected = selectedDevice?.device_id === d.device_id;
+                                    const isOnline = selectedDevice ? isSelected : d.status === 'ONLINE';
 
-                        {filteredDevices.map(d => {
-                            const isSelected = selectedDevice?.device_id === d.device_id;
-                            const isOnline = selectedDevice
-                                ? isSelected
-                                : d.status === 'ONLINE';
+                                    return (
+                                        <li key={d.device_id}
+                                            className={`device-item ${isSelected ? 'selected-device' : ''}`}
+                                            onClick={() => handleDeviceClick(d)}
+                                            style={{ cursor: 'pointer', borderColor: isSelected ? '#3b82f6' : 'var(--border-color)', background: isSelected ? 'rgba(59, 130, 246, 0.1)' : 'rgba(255,255,255,0.03)' }}>
+                                            <div className="device-header">
+                                                <span className={`status-dot ${isOnline ? 'online' : 'offline'}`}></span>
+                                                <strong>{d.name}</strong>
+                                                <span className="device-status" style={{ color: isOnline ? '#10b981' : '#64748b' }}>ONLINE</span>
+                                            </div>
+                                            <div className="device-details">
+                                                <div className="detail-row"><span>City:</span> <small>{d.city}</small></div>
+                                                <div className="detail-row"><span>OS:</span> <small>Windows</small></div>
+                                            </div>
+                                        </li>
+                                    )
+                                })}
+                            </ul>
+                        </div>
+                    )}
 
-                            // Inline Editing Mode
-                            if (editingId === d.device_id) {
+                    {/* IOT DEVICES SECTION */}
+                    <div className="device-category">
+                        {iotDevices.length > 0 && (
+                            <div className="section-header">
+                                <span style={{ fontSize: '1.2em' }}>📡</span>
+                                <h3>IoT Devices</h3>
+                            </div>
+                        )}
+
+                        <ul>
+                            {filteredDevices.length === 0 && <p style={{ opacity: 0.5, fontStyle: 'italic' }}>No devices in {selectedCity}</p>}
+
+                            {iotDevices.map(d => {
+                                const isSelected = selectedDevice?.device_id === d.device_id;
+                                const isOnline = selectedDevice
+                                    ? isSelected
+                                    : d.status === 'ONLINE';
+
+                                // Inline Editing Mode
+                                if (editingId === d.device_id) {
+                                    return (
+                                        <li key={d.device_id} className="device-item" style={{ borderColor: '#3b82f6', background: 'rgba(59, 130, 246, 0.05)' }}>
+                                            <div className="add-device-form" style={{ border: 'none', margin: 0, padding: 0 }}>
+                                                <input
+                                                    value={editFormData.name}
+                                                    onChange={e => setEditFormData({ ...editFormData, name: e.target.value })}
+                                                    placeholder="Name"
+                                                />
+                                                <select
+                                                    value={editFormData.city}
+                                                    onChange={e => setEditFormData({ ...editFormData, city: e.target.value })}
+                                                    style={{ width: '100%', padding: '0.6rem', margin: '5px 0', borderRadius: '4px', border: '1px solid #475569', background: 'rgba(255,255,255,0.05)', color: 'white' }}
+                                                >
+                                                    {PREDEFINED_CITIES.map(c => <option key={c} value={c}>{c}</option>)}
+                                                </select>
+                                                <select
+                                                    value={editFormData.type}
+                                                    onChange={e => setEditFormData({ ...editFormData, type: e.target.value })}
+                                                    style={{ width: '100%', padding: '0.6rem', margin: '5px 0', borderRadius: '4px', border: '1px solid #475569', background: 'rgba(255,255,255,0.05)', color: 'white' }}
+                                                >
+                                                    {DEVICE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                                                </select>
+                                                <div style={{ display: 'flex', gap: '5px', marginTop: '10px' }}>
+                                                    <button onClick={handleUpdateDevice} style={{ background: '#10b981', flex: 1 }}>Save</button>
+                                                    <button onClick={cancelEdit} style={{ background: '#64748b', flex: 1 }}>Cancel</button>
+                                                </div>
+                                            </div>
+                                        </li>
+                                    );
+                                }
+
                                 return (
-                                    <li key={d.device_id} className="device-item" style={{ borderColor: '#3b82f6', background: 'rgba(59, 130, 246, 0.05)' }}>
-                                        <div className="add-device-form" style={{ border: 'none', margin: 0, padding: 0 }}>
-                                            <input
-                                                value={editFormData.name}
-                                                onChange={e => setEditFormData({ ...editFormData, name: e.target.value })}
-                                                placeholder="Name"
-                                            />
-                                            <select
-                                                value={editFormData.city}
-                                                onChange={e => setEditFormData({ ...editFormData, city: e.target.value })}
-                                                style={{ width: '100%', padding: '0.6rem', margin: '5px 0', borderRadius: '4px', border: '1px solid #475569', background: 'rgba(255,255,255,0.05)', color: 'white' }}
-                                            >
-                                                {PREDEFINED_CITIES.map(c => <option key={c} value={c}>{c}</option>)}
-                                            </select>
-                                            <select
-                                                value={editFormData.type}
-                                                onChange={e => setEditFormData({ ...editFormData, type: e.target.value })}
-                                                style={{ width: '100%', padding: '0.6rem', margin: '5px 0', borderRadius: '4px', border: '1px solid #475569', background: 'rgba(255,255,255,0.05)', color: 'white' }}
-                                            >
-                                                {DEVICE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                                            </select>
-                                            <div style={{ display: 'flex', gap: '5px', marginTop: '10px' }}>
-                                                <button onClick={handleUpdateDevice} style={{ background: '#10b981', flex: 1 }}>Save</button>
-                                                <button onClick={cancelEdit} style={{ background: '#64748b', flex: 1 }}>Cancel</button>
+                                    <li
+                                        key={d.device_id}
+                                        className={`device-item ${isSelected ? 'selected-device' : ''}`}
+                                        onClick={() => handleDeviceClick(d)}
+                                        style={{ cursor: 'pointer', borderColor: isSelected ? '#3b82f6' : 'var(--border-color)', background: isSelected ? 'rgba(59, 130, 246, 0.1)' : 'rgba(255,255,255,0.03)' }}
+                                    >
+                                        <div className="device-header">
+                                            <span className={`status-dot ${isOnline ? 'online' : 'offline'}`}></span>
+                                            <strong>{d.name}</strong>
+                                            <span className="device-status" style={{ color: isOnline ? '#10b981' : '#64748b' }}>
+                                                {isOnline ? 'ONLINE' : 'OFFLINE'}
+                                            </span>
+                                        </div>
+
+                                        <div className="device-details">
+                                            <div className="detail-row">
+                                                <span>City:</span> <small>{d.city || "Unknown"}</small>
+                                            </div>
+                                            <div className="detail-row">
+                                                <span>IP:</span> <small>{d.ip_address || "N/A"}</small>
+                                            </div>
+                                            <div className="detail-row">
+                                                <span>Type:</span> <small>{d.type || "N/A"}</small>
                                             </div>
                                         </div>
+
+                                        {d.city !== 'Local' && (
+                                            <div className="device-actions" style={{ gap: '0.5rem' }}>
+                                                <button className="delete-btn" style={{ borderColor: '#3b82f6', color: '#3b82f6' }} onClick={(e) => startEdit(e, d)}>Edit</button>
+                                                <button className="delete-btn" onClick={(e) => handleDeleteDevice(e, d.device_id)}>Delete</button>
+                                            </div>
+                                        )}
+                                        {d.city === 'Local' && (
+                                            <div className="device-actions">
+                                                <span style={{ fontSize: '0.8em', color: '#64748b', fontStyle: 'italic' }}>System Device (Protected)</span>
+                                            </div>
+                                        )}
                                     </li>
-                                );
-                            }
-
-                            return (
-                                <li
-                                    key={d.device_id}
-                                    className={`device-item ${isSelected ? 'selected-device' : ''}`}
-                                    onClick={() => handleDeviceClick(d)}
-                                    style={{ cursor: 'pointer', borderColor: isSelected ? '#3b82f6' : 'var(--border-color)', background: isSelected ? 'rgba(59, 130, 246, 0.1)' : 'rgba(255,255,255,0.03)' }}
-                                >
-                                    <div className="device-header">
-                                        <span className={`status-dot ${isOnline ? 'online' : 'offline'}`}></span>
-                                        <strong>{d.name}</strong>
-                                        <span className="device-status" style={{ color: isOnline ? '#10b981' : '#64748b' }}>
-                                            {isOnline ? 'ONLINE' : 'OFFLINE'}
-                                        </span>
-                                    </div>
-
-                                    <div className="device-details">
-                                        <div className="detail-row">
-                                            <span>City:</span> <small>{d.city || "Unknown"}</small>
-                                        </div>
-                                        <div className="detail-row">
-                                            <span>IP:</span> <small>{d.ip_address || "N/A"}</small>
-                                        </div>
-                                        <div className="detail-row">
-                                            <span>Type:</span> <small>{d.type || "N/A"}</small>
-                                        </div>
-                                    </div>
-
-                                    {d.city !== 'Local' && (
-                                        <div className="device-actions" style={{ gap: '0.5rem' }}>
-                                            <button className="delete-btn" style={{ borderColor: '#3b82f6', color: '#3b82f6' }} onClick={(e) => startEdit(e, d)}>Edit</button>
-                                            <button className="delete-btn" onClick={(e) => handleDeleteDevice(e, d.device_id)}>Delete</button>
-                                        </div>
-                                    )}
-                                    {d.city === 'Local' && (
-                                        <div className="device-actions">
-                                            <span style={{ fontSize: '0.8em', color: '#64748b', fontStyle: 'italic' }}>System Device (Protected)</span>
-                                        </div>
-                                    )}
-                                </li>
-                            )
-                        })}
-                    </ul>
+                                )
+                            })}
+                        </ul>
+                    </div>
 
                     {/* Add Device Form - Hidden for Local */}
                     {newDevice.city !== 'Local' && selectedCity !== 'Local' && (
@@ -469,7 +532,7 @@ function Dashboard() {
                                     />
                                     <Legend wrapperStyle={{ paddingTop: '10px' }} />
 
-                                    {selectedDevice ? (
+                                    {selectedDevice && selectedDevice.city === 'Local' ? (
                                         <>
                                             <Line type="monotone" dataKey="cpu_usage" stroke="#8b5cf6" strokeWidth={2} dot={false} activeDot={{ r: 6 }} name="CPU (%)" />
                                             <Line type="monotone" dataKey="ram_usage" stroke="#f59e0b" strokeWidth={2} dot={false} name="RAM (%)" />

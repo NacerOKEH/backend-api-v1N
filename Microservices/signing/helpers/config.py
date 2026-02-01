@@ -13,6 +13,11 @@ PASSWORD_DB:Final[str]=os.getenv('PASSWORD_DB','1234')
 NAME_DB:Final[str]=os.getenv('NAME_DB','db_auth')
 SERVER_DB:Final[str]=os.getenv('SERVER_DB','localhost')
 URL_DB:Final[str]='postgresql+psycopg2://'+USER_DB+':'+PASSWORD_DB+'@'+SERVER_DB+':5432/'+NAME_DB
+
+# Redis
+REDIS_HOST:Final[str]=os.getenv("REDIS_HOST", "redis")
+REDIS_PORT:Final[str]=os.getenv("REDIS_PORT", "6379")
+
 #sqlalchemy
 engine=create_engine(URL_DB,pool_size=10)
 LocalSession=sessionmaker(bind=engine)

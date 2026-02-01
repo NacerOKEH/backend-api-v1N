@@ -32,6 +32,8 @@ class DeviceEventConsumer(threading.Thread):
                     time.sleep(5)
             channel = connection.channel()
 
+            self.queue_name = "monitoring_queue_v2" # Force new queue
+
             channel.exchange_declare(exchange=self.exchange, exchange_type='topic', durable=True)
             result = channel.queue_declare(queue=self.queue_name, exclusive=False, durable=True)
             queue_name = result.method.queue
@@ -40,7 +42,7 @@ class DeviceEventConsumer(threading.Thread):
             channel.queue_bind(exchange=self.exchange, queue=queue_name, routing_key="device.#")
             channel.queue_bind(exchange=self.exchange, queue=queue_name, routing_key="cloud-security-iot.iot.#")
 
-            print(f" [*] Waiting for device events. To exit press CTRL+C")
+            print(f" [*] Waiting for device events. To exit press CTRL+C", flush=True)
             
             def callback(ch, method, properties, body):
                 try:
@@ -61,17 +63,19 @@ class DeviceEventConsumer(threading.Thread):
                         }
                         collection.insert_one(document)
                     except Exception as e:
-                        print(f"Error saving to MongoDB: {e}")
+                        print(f"Error saving to MongoDB: {e}", flush=True)
 
                     # 2. Emit via Socket.IO
                     # self.sio is the SioWrapper passed from main.py, so .emit() is thread-safe
+                    print(f"[Consumer] Emitting socket event: {frontend_event_type} for device {event_data.get('device_id')}", flush=True)
                     self.sio.emit('device_update', {'type': frontend_event_type, 'data': event_data})
                     
                 except Exception as e:
-                    print(f"Error processing message: {e}")
+                    print(f"Error processing message: {e}", flush=True)
 
                 ch.basic_ack(delivery_tag=method.delivery_tag)
 
+            print("[Consumer] Starting to consume...", flush=True)
             channel.basic_consume(queue=queue_name, on_message_callback=callback)
             channel.start_consuming()
 

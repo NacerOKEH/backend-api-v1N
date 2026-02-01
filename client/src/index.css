@@ -2,23 +2,33 @@
 
 :root {
   --font-family: 'Inter', system-ui, Avenir, Helvetica, Arial, sans-serif;
-  
-  /* Modern Dark Theme Palette */
-  --bg-primary: #0f172a;
-  --bg-secondary: #1e293b;
-  --bg-glass: rgba(30, 41, 59, 0.7);
-  --text-primary: #f1f5f9;
-  --text-secondary: #94a3b8;
-  --accent-primary: #3b82f6;
-  --accent-secondary: #8b5cf6;
-  --success: #10b981;
+
+  /* Obsidian & Gold Luxury Theme */
+  --bg-primary: #050505;
+  /* Jet Black */
+  --bg-secondary: #0a0a0a;
+  /* Deepest Charcoal */
+  --bg-glass: rgba(10, 10, 10, 0.85);
+  /* Dark Glass */
+  --text-primary: #e5e5e5;
+  /* Off-White */
+  --text-secondary: #a3a3a3;
+  /* Neutral Gray */
+  --accent-primary: #d4af37;
+  /* Metallic Gold */
+  --accent-secondary: #b45309;
+  /* Deep Bronze */
+  --success: #059669;
+  /* Emerald */
   --error: #ef4444;
-  --border-color: rgba(255, 255, 255, 0.1);
-  
-  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-  --shadow-neon: 0 0 10px rgba(59, 130, 246, 0.5);
+  /* Red */
+  --border-color: rgba(212, 175, 55, 0.2);
+  /* Subtle Gold Border */
+
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.5);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.7);
+  --shadow-neon: 0 0 15px rgba(212, 175, 55, 0.2);
 
   --radius-md: 0.5rem;
   --radius-lg: 1rem;
@@ -42,13 +52,16 @@ body {
   min-width: 320px;
   min-height: 100vh;
   font-family: var(--font-family);
-  background-image: 
-    radial-gradient(at 0% 0%, rgba(59, 130, 246, 0.15) 0px, transparent 50%),
-    radial-gradient(at 100% 0%, rgba(139, 92, 246, 0.15) 0px, transparent 50%);
+  background: var(--bg-primary);
+  background-image:
+    radial-gradient(circle at 50% 0%, rgba(212, 175, 55, 0.1) 0%, transparent 60%),
+    linear-gradient(to bottom, transparent, #050505);
   background-attachment: fixed;
 }
 
-h1, h2, h3 {
+h1,
+h2,
+h3 {
   font-weight: 600;
   letter-spacing: -0.025em;
   color: var(--text-primary);
@@ -102,14 +115,14 @@ button:focus-visible {
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--bg-primary); 
+  background: var(--bg-primary);
 }
- 
+
 ::-webkit-scrollbar-thumb {
-  background: var(--bg-secondary); 
+  background: var(--bg-secondary);
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #334155; 
+  background: #334155;
 }

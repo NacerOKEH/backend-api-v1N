@@ -15,7 +15,7 @@ http_bearer=HTTPBearer()
 def check_token(session=Depends(session_factory),token:HTTPAuthorizationCredentials=Security(http_bearer)):
     credentials=token.credentials
     payload=decode_token(credentials)
-    if is_blacklist_token(session,credentials):
+    if is_blacklist_token(credentials):
         raise HTTPException(status_code=401,detail='Token is blacklisted')
     if not payload :
         raise HTTPException(status_code=404,detail='Invalid token')
@@ -90,7 +90,7 @@ def logout_user(token:HTTPAuthorizationCredentials=Security(http_bearer),
                 ):
     credentials=token.credentials
     
-    add_ok=add_token_to_blacklist(session,credentials)
+    add_ok=add_token_to_blacklist(credentials)
     if add_ok :
         logger.info('user logged out')
         return Response(status_code=200,content="logout successful")
