@@ -38,8 +38,8 @@ def fetch_devices():
         response = requests.get(f"{DEVICE_API_URL}/devices/")
         if response.status_code == 200:
             devices = response.json()
-            # Convert to dict format {id: {city, name}}
-            return {d['device_id']: {'city': d.get('city', 'Unknown'), 'name': d.get('name')} for d in devices}
+            # Convert to dict format {id: {city, name, type}}
+            return {d['device_id']: {'city': d.get('city', 'Unknown'), 'name': d.get('name'), 'type': d.get('type')} for d in devices}
     except Exception as e:
         print(f"Error fetching devices: {e}")
     return {}
@@ -93,6 +93,7 @@ def main():
             for device_id, info in active_devices.items():
                 city = info['city']
                 name = info['name']
+                device_type = info.get('type', 'Sensor')
 
                 # SKIP Host PC (Logic moved to end-devices/local_monitor.py)
                 if city == 'Local' or name == 'Host PC':
@@ -114,6 +115,17 @@ def main():
                     "disk_usage": device_disk,
                     "timestamp": time.time()
                 }
+
+                # Add Type-Specific Metrics
+                if device_type == 'Server':
+                    payload['connected_users'] = random.randint(5, 200)
+                    payload['active_processes'] = random.randint(50, 150)
+                elif device_type == 'Actuator':
+                    payload['power_usage'] = round(random.uniform(10.0, 500.0), 1) # Watts
+                    payload['status'] = 1 if random.random() > 0.1 else 0 # 90% chance ON
+                elif device_type == 'Gateway':
+                    payload['network_in'] = round(random.uniform(0.1, 100.0), 2) # Mbps
+                    payload['network_out'] = round(random.uniform(0.1, 50.0), 2) # Mbps
                 
                 # Routing key format: cloud-security-iot.iot.temperature.{device_id}
                 routing_key = f"cloud-security-iot.iot.temperature.{device_id}"
@@ -123,7 +135,7 @@ def main():
                     routing_key=routing_key,
                     body=json.dumps(payload)
                 )
-                print(f"[>] Published for {name} ({city})")
+                print(f"[>] Published for {name} ({city}): {json.dumps(payload)}", flush=True)
                 
             time.sleep(5) 
     except KeyboardInterrupt:

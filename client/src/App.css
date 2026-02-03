@@ -113,6 +113,12 @@ select {
     transition: all 0.2s;
 }
 
+select option {
+    background-color: #1e293b;
+    color: white;
+    padding: 10px;
+}
+
 select:hover {
     border-color: var(--accent-primary);
 }

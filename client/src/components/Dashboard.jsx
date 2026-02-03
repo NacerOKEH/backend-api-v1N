@@ -23,8 +23,8 @@ function Dashboard() {
     const [selectedCity, setSelectedCity] = useState(PREDEFINED_CITIES[0])
     const [forecast, setForecast] = useState(null)
 
-    // State for selected specific device (for "Online" status and focused data)
-    const [selectedDevice, setSelectedDevice] = useState(null)
+    // State for selected devices (Multi-select)
+    const [selectedDevices, setSelectedDevices] = useState([])
     const [searchQuery, setSearchQuery] = useState('')
 
     const [newDevice, setNewDevice] = useState({ name: '', city: PREDEFINED_CITIES[0], type: 'Sensor' })
@@ -91,7 +91,8 @@ function Dashboard() {
         fetch(`http://localhost:8001/devices/${id}`, { method: 'DELETE' })
             .then(() => {
                 setDevices(prev => prev.filter(d => d.device_id !== id))
-                if (selectedDevice?.device_id === id) setSelectedDevice(null)
+                // Remove from selection if deleted
+                setSelectedDevices(prev => prev.filter(d => d.device_id !== id))
             })
     }
 
@@ -123,17 +124,19 @@ function Dashboard() {
             .catch(err => console.error("Update failed", err));
     };
 
-    const fetchDevices = () => {
+    const fetchDevices = (init = false) => {
         fetch('http://localhost:8001/devices/')
             .then(res => res.json())
             .then(data => {
                 setDevices(data)
-                // Auto-select "Host PC" if registered and nothing selected
-                const hostDevice = data.find(d => d.name === "Host PC")
-                if (hostDevice && !selectedDevice) {
-                    setSelectedDevice(hostDevice)
-                    // If device has city "Local" or specific city, select it to view graph
-                    if (hostDevice.city) setSelectedCity(hostDevice.city)
+                // Auto-select "Host PC" only on initial load if registered and nothing selected
+                if (init) {
+                    const hostDevice = data.find(d => d.name === "Host PC")
+                    if (hostDevice && selectedDevices.length === 0) {
+                        setSelectedDevices([hostDevice])
+                        // If device has city "Local" or specific city, select it to view graph
+                        if (hostDevice.city) setSelectedCity(hostDevice.city)
+                    }
                 }
             })
             .catch(err => console.error("Failed to fetch devices", err))
@@ -156,7 +159,7 @@ function Dashboard() {
 
             if (event.type === 'device.telemetry') {
                 const receivedData = event.data;
-                console.log("Telemetry Data:", receivedData); // DEBUG LOG
+                // console.log("Telemetry Data:", receivedData); // DEBUG LOG - too noisy
 
                 setDeviceData(current => {
                     const newData = [...current, {
@@ -165,7 +168,7 @@ function Dashboard() {
                         city: receivedData.city, // Ensure city is passed
                         ...receivedData
                     }]
-                    return newData.slice(-50)
+                    return newData.slice(-100) // Increase buffer size slightly for multi-graph
                 })
             } else if (event.type === 'device.updated' || event.type === 'device.created') {
                 fetchDevices()
@@ -185,7 +188,8 @@ function Dashboard() {
 
     // Forecast Logic
     useEffect(() => {
-        const targetCity = selectedDevice ? selectedDevice.city : selectedCity
+        // Use the most recently selected device's city, or the global selectedCity
+        const targetCity = selectedDevices.length > 0 ? selectedDevices[selectedDevices.length - 1].city : selectedCity
         if (targetCity) {
             fetch(`http://localhost:8002/monitoring/predict/${targetCity}`)
                 .then(res => res.json())
@@ -194,16 +198,22 @@ function Dashboard() {
         } else {
             setForecast(null); // Clear forecast if 'All' is selected or no specific device
         }
-    }, [selectedCity, selectedDevice])
+    }, [selectedCity, selectedDevices])
 
-    // Click on Device Handler
+    // Click on Device Handler (Multi-select)
     const handleDeviceClick = (device) => {
-        if (selectedDevice?.device_id === device.device_id) {
-            setSelectedDevice(null) // Deselect
-        } else {
-            setSelectedDevice(device)
-            if (device.city) setSelectedCity(device.city)
-        }
+        setSelectedDevices(prev => {
+            const exists = prev.find(d => d.device_id === device.device_id)
+            if (exists) {
+                // Deselect
+                return prev.filter(d => d.device_id !== device.device_id)
+            } else {
+                // Select (Add to array)
+                // Only update city view if we are NOT in global 'All' mode
+                if (device.city && selectedCity !== 'All') setSelectedCity(device.city)
+                return [...prev, device]
+            }
+        })
     }
 
     // --- FILTER LOGIC ---
@@ -215,25 +225,12 @@ function Dashboard() {
     const endDevices = filteredDevices.filter(d => d.city === 'Local');
     const iotDevices = filteredDevices.filter(d => d.city !== 'Local');
 
-    // Chart Filter: Show telemetry for selected Device OR selected City
-    const filteredData = selectedDevice
-        ? deviceData.filter(d => d.device_id === selectedDevice.device_id)
-        : (selectedCity === 'All' ? deviceData : deviceData.filter(d => d.city === selectedCity))
 
-    // Debug Chart Data
-    if (selectedDevice && filteredData.length === 0 && deviceData.length > 0) {
-        console.warn("Filtered data is empty but global data exists. Check device_id matching.",
-            { selectedId: selectedDevice.device_id, sampleDataId: deviceData[0].device_id });
-    }
+    // Helper to get latest telemetry for the FOCUSED device (last selected)
+    const focusedDevice = selectedDevices.length > 0 ? selectedDevices[selectedDevices.length - 1] : null;
 
-    // Chart Data Source
-    const chartData = (selectedCity && !selectedDevice && forecast?.hourly_forecast)
-        ? forecast.hourly_forecast
-        : filteredData
-
-    // Helper to get latest telemetry for selected device (for Cards)
-    const latestTelemetry = selectedDevice
-        ? deviceData.filter(d => d.device_id === selectedDevice.device_id).slice(-1)[0]
+    const latestTelemetry = focusedDevice
+        ? deviceData.filter(d => d.device_id === focusedDevice.device_id).slice(-1)[0]
         : null;
 
     return (
@@ -248,7 +245,7 @@ function Dashboard() {
             </div>
 
             {/* City Filter Control & Search - Always visible if no device selected */}
-            {!selectedDevice && (
+            {selectedDevices.length === 0 && (
                 <div className="filter-controls">
                     <div>
                         <label style={{ marginRight: '10px', fontWeight: 'bold' }}>Filter by City: </label>
@@ -270,67 +267,17 @@ function Dashboard() {
                 </div>
             )}
 
-            {selectedDevice && (
+            {selectedDevices.length > 0 && (
                 <div style={{ marginBottom: '20px', padding: '10px', background: 'rgba(59, 130, 246, 0.1)', borderRadius: '8px', border: '1px solid #3b82f6', color: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div>
-                        Executing <strong>psutil</strong> monitoring for: <strong>{selectedDevice.name}</strong> ({selectedDevice.city})
+                        Monitoring <strong>{selectedDevices.length}</strong> device(s).
+                        {focusedDevice && <span> Focused: <strong>{focusedDevice.name}</strong></span>}
                     </div>
-                    <button onClick={() => setSelectedDevice(null)} style={{ padding: '4px 12px', cursor: 'pointer', borderRadius: '4px', border: 'none', background: '#3b82f6', color: 'white' }}>Back to Overview</button>
+                    <button onClick={() => setSelectedDevices([])} style={{ padding: '4px 12px', cursor: 'pointer', borderRadius: '4px', border: 'none', background: '#3b82f6', color: 'white' }}>Clear Selection</button>
                 </div>
             )}
 
-            {/* STATS CARDS - DYNAMIC BASED ON DEVICE TYPE */}
-            {selectedDevice && selectedDevice.city === 'Local' && (
-                <div className="stats-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '15px' }}>
-                    <div className="stat-card" style={{ background: 'rgba(139, 92, 246, 0.1)', border: '1px solid #8b5cf6', padding: '15px', borderRadius: '8px' }}>
-                        <h3 style={{ color: '#a78bfa', margin: '0 0 10px 0' }}>CPU Usage</h3>
-                        <div style={{ fontSize: '2em', fontWeight: 'bold', color: '#fff' }}>
-                            {latestTelemetry ? `${latestTelemetry.cpu_usage}%` : '...'}
-                        </div>
-                        <div style={{ height: '6px', width: '100%', background: 'rgba(255,255,255,0.1)', borderRadius: '3px', marginTop: '10px', overflow: 'hidden' }}>
-                            <div style={{ width: latestTelemetry ? `${latestTelemetry.cpu_usage}%` : '0%', height: '100%', background: '#8b5cf6', transition: 'width 0.5s' }}></div>
-                        </div>
-                    </div>
 
-                    <div className="stat-card" style={{ background: 'rgba(245, 158, 11, 0.1)', border: '1px solid #f59e0b', padding: '15px', borderRadius: '8px' }}>
-                        <h3 style={{ color: '#fbbf24', margin: '0 0 10px 0' }}>RAM Usage</h3>
-                        <div style={{ fontSize: '2em', fontWeight: 'bold', color: '#fff' }}>
-                            {latestTelemetry ? `${latestTelemetry.ram_usage}%` : '...'}
-                        </div>
-                        <div style={{ height: '6px', width: '100%', background: 'rgba(255,255,255,0.1)', borderRadius: '3px', marginTop: '10px', overflow: 'hidden' }}>
-                            <div style={{ width: latestTelemetry ? `${latestTelemetry.ram_usage}%` : '0%', height: '100%', background: '#f59e0b', transition: 'width 0.5s' }}></div>
-                        </div>
-                    </div>
-
-                    <div className="stat-card" style={{ background: 'rgba(16, 185, 129, 0.1)', border: '1px solid #10b981', padding: '15px', borderRadius: '8px' }}>
-                        <h3 style={{ color: '#34d399', margin: '0 0 10px 0' }}>Disk Usage</h3>
-                        <div style={{ fontSize: '2em', fontWeight: 'bold', color: '#fff' }}>
-                            {latestTelemetry ? `${latestTelemetry.disk_usage || 0}%` : '...'}
-                        </div>
-                        <div style={{ height: '6px', width: '100%', background: 'rgba(255,255,255,0.1)', borderRadius: '3px', marginTop: '10px', overflow: 'hidden' }}>
-                            <div style={{ width: latestTelemetry ? `${latestTelemetry.disk_usage || 0}%` : '0%', height: '100%', background: '#10b981', transition: 'width 0.5s' }}></div>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {selectedDevice && selectedDevice.city !== 'Local' && (
-                <div className="stats-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '15px' }}>
-                    <div className="stat-card" style={{ background: 'rgba(59, 130, 246, 0.1)', border: '1px solid #3b82f6', padding: '15px', borderRadius: '8px' }}>
-                        <h3 style={{ color: '#60a5fa', margin: '0 0 10px 0' }}>Temperature</h3>
-                        <div style={{ fontSize: '2em', fontWeight: 'bold', color: '#fff' }}>
-                            {latestTelemetry ? `${latestTelemetry.temperature}°C` : '...'}
-                        </div>
-                    </div>
-
-                    <div className="stat-card" style={{ background: 'rgba(16, 185, 129, 0.1)', border: '1px solid #10b981', padding: '15px', borderRadius: '8px' }}>
-                        <h3 style={{ color: '#34d399', margin: '0 0 10px 0' }}>Humidity</h3>
-                        <div style={{ fontSize: '2em', fontWeight: 'bold', color: '#fff' }}>
-                            {latestTelemetry ? `${latestTelemetry.humidity}%` : '...'}
-                        </div>
-                    </div>
-                </div>
-            )}
 
 
             <div className="grid">
@@ -345,18 +292,26 @@ function Dashboard() {
                             </div>
                             <ul>
                                 {endDevices.map(d => {
-                                    const isSelected = selectedDevice?.device_id === d.device_id;
-                                    const isOnline = selectedDevice ? isSelected : d.status === 'ONLINE';
+                                    const isSelected = selectedDevices.some(sel => sel.device_id === d.device_id);
+                                    const isFocused = focusedDevice?.device_id === d.device_id;
+                                    const isOnline = d.status === 'ONLINE' || isSelected; // User Request: Display used (selected) devices as Online
 
                                     return (
                                         <li key={d.device_id}
                                             className={`device-item ${isSelected ? 'selected-device' : ''}`}
                                             onClick={() => handleDeviceClick(d)}
-                                            style={{ cursor: 'pointer', borderColor: isSelected ? '#3b82f6' : 'var(--border-color)', background: isSelected ? 'rgba(59, 130, 246, 0.1)' : 'rgba(255,255,255,0.03)' }}>
+                                            style={{
+                                                cursor: 'pointer',
+                                                borderColor: isFocused ? '#8b5cf6' : (isSelected ? '#3b82f6' : 'var(--border-color)'),
+                                                borderWidth: isFocused ? '2px' : '1px',
+                                                background: isSelected ? 'rgba(59, 130, 246, 0.1)' : 'rgba(255,255,255,0.03)'
+                                            }}>
                                             <div className="device-header">
                                                 <span className={`status-dot ${isOnline ? 'online' : 'offline'}`}></span>
                                                 <strong>{d.name}</strong>
-                                                <span className="device-status" style={{ color: isOnline ? '#10b981' : '#64748b' }}>ONLINE</span>
+                                                <span className="device-status" style={{ color: isOnline ? '#10b981' : '#64748b' }}>
+                                                    {isOnline ? 'ONLINE' : 'OFFLINE'}
+                                                </span>
                                             </div>
                                             <div className="device-details">
                                                 <div className="detail-row"><span>City:</span> <small>{d.city}</small></div>
@@ -382,10 +337,9 @@ function Dashboard() {
                             {filteredDevices.length === 0 && <p style={{ opacity: 0.5, fontStyle: 'italic' }}>No devices in {selectedCity}</p>}
 
                             {iotDevices.map(d => {
-                                const isSelected = selectedDevice?.device_id === d.device_id;
-                                const isOnline = selectedDevice
-                                    ? isSelected
-                                    : d.status === 'ONLINE';
+                                const isSelected = selectedDevices.some(sel => sel.device_id === d.device_id);
+                                const isFocused = focusedDevice?.device_id === d.device_id;
+                                const isOnline = d.status === 'ONLINE' || isSelected;
 
                                 // Inline Editing Mode
                                 if (editingId === d.device_id) {
@@ -425,7 +379,12 @@ function Dashboard() {
                                         key={d.device_id}
                                         className={`device-item ${isSelected ? 'selected-device' : ''}`}
                                         onClick={() => handleDeviceClick(d)}
-                                        style={{ cursor: 'pointer', borderColor: isSelected ? '#3b82f6' : 'var(--border-color)', background: isSelected ? 'rgba(59, 130, 246, 0.1)' : 'rgba(255,255,255,0.03)' }}
+                                        style={{
+                                            cursor: 'pointer',
+                                            borderColor: isFocused ? '#8b5cf6' : (isSelected ? '#3b82f6' : 'var(--border-color)'),
+                                            borderWidth: isFocused ? '2px' : '1px',
+                                            background: isSelected ? 'rgba(59, 130, 246, 0.1)' : 'rgba(255,255,255,0.03)'
+                                        }}
                                     >
                                         <div className="device-header">
                                             <span className={`status-dot ${isOnline ? 'online' : 'offline'}`}></span>
@@ -500,61 +459,202 @@ function Dashboard() {
                     )}
                 </div>
 
-                <div className="card">
-                    <h2>
-                        {selectedDevice
-                            ? `System Monitor: ${selectedDevice.name}`
-                            : (selectedCity === 'All' ? "Global Overview" : `Hourly Forecast & Overview (${selectedCity})`)
-                        }
-                    </h2>
+                <div className="card-column" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
 
-                    {/* Hide Chart if in All mode and no device selected */}
-                    {(selectedCity === 'All' && !selectedDevice) ? (
-                        <div style={{ width: '100%', height: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontStyle: 'italic', flexDirection: 'column' }}>
-                            <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🌍</div>
-                            <div>Select a specific device to view details.</div>
-                        </div>
-                    ) : (
-                        <div style={{ width: '100%', height: 300 }}>
-                            <ResponsiveContainer>
-                                <LineChart data={chartData}>
-                                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
-                                    <XAxis dataKey="time" stroke="#94a3b8" fontSize={12} tickLine={false} />
-                                    <YAxis stroke="#94a3b8" fontSize={12} tickLine={false} />
-                                    <Tooltip
-                                        contentStyle={{
-                                            backgroundColor: 'rgba(30, 41, 59, 0.9)',
-                                            border: '1px solid rgba(255,255,255,0.1)',
-                                            borderRadius: '8px',
-                                            color: '#f1f5f9'
-                                        }}
-                                        itemStyle={{ color: '#f1f5f9' }}
-                                    />
-                                    <Legend wrapperStyle={{ paddingTop: '10px' }} />
-
-                                    {selectedDevice && selectedDevice.city === 'Local' ? (
-                                        <>
-                                            <Line type="monotone" dataKey="cpu_usage" stroke="#8b5cf6" strokeWidth={2} dot={false} activeDot={{ r: 6 }} name="CPU (%)" />
-                                            <Line type="monotone" dataKey="ram_usage" stroke="#f59e0b" strokeWidth={2} dot={false} name="RAM (%)" />
-                                            <Line type="monotone" dataKey="disk_usage" stroke="#10b981" strokeWidth={2} dot={false} name="Disk (%)" />
-                                        </>
-                                    ) : (
-                                        <>
+                    {/* GLOBAL FORECAST OR OVERVIEW WHEN NOTHING SELECTED */}
+                    {selectedDevices.length === 0 && (
+                        <div className="card">
+                            <h2>
+                                {selectedCity === 'All' ? "Global Overview" : `Hourly Forecast & Overview (${selectedCity})`}
+                            </h2>
+                            <div style={{ width: '100%', height: 300 }}>
+                                {forecast?.hourly_forecast ? (
+                                    <ResponsiveContainer>
+                                        <LineChart data={forecast.hourly_forecast}>
+                                            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
+                                            <XAxis dataKey="time" stroke="#94a3b8" fontSize={12} tickLine={false} />
+                                            <YAxis stroke="#94a3b8" fontSize={12} tickLine={false} />
+                                            <Tooltip contentStyle={{ backgroundColor: 'rgba(30, 41, 59, 0.9)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: '#f1f5f9' }} />
+                                            <Legend wrapperStyle={{ paddingTop: '10px' }} />
                                             <Line type="monotone" dataKey="temperature" stroke="#3b82f6" strokeWidth={2} dot={false} activeDot={{ r: 6 }} name="Temp (°C)" />
                                             <Line type="monotone" dataKey="humidity" stroke="#10b981" strokeWidth={2} dot={false} name="Humidity (%)" />
-                                        </>
-                                    )}
-                                </LineChart>
-                            </ResponsiveContainer>
+                                        </LineChart>
+                                    </ResponsiveContainer>
+                                ) : (
+                                    <div style={{ display: 'flex', height: '100%', alignItems: 'center', justifyContent: 'center', color: '#64748b' }}>
+                                        {selectedCity === 'All' ? 'Select a city or device to see metrics' : 'Loading forecast...'}
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     )}
+
+                    {/* MULTI-CHART RENDERER */}
+                    {selectedDevices.map(device => {
+                        const deviceSpecificData = deviceData.filter(d => d.device_id === device.device_id);
+                        const lastData = deviceSpecificData.length > 0 ? deviceSpecificData[deviceSpecificData.length - 1] : null;
+
+                        return (
+                            <div className="card" key={device.device_id} style={{ borderLeft: focusedDevice?.device_id === device.device_id ? '4px solid #8b5cf6' : '1px solid var(--border-color)' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                                    <h2>
+                                        System Monitor: {device.name}
+                                        <span style={{ fontSize: '0.6em', marginLeft: '10px', color: '#94a3b8', fontWeight: 'normal' }}>({device.city})</span>
+                                    </h2>
+                                </div>
+
+                                {/* PER-DEVICE STATS CARDS */}
+                                {(() => {
+                                    // Helper render function for cleaner JSX
+                                    if (device.city === 'Local') {
+                                        // Local Host PC -> System Stats
+                                        return (
+                                            <div className="stats-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '15px', marginBottom: '20px' }}>
+                                                <div className="stat-card" style={{ background: 'rgba(139, 92, 246, 0.1)', border: '1px solid #8b5cf6', padding: '15px', borderRadius: '8px' }}>
+                                                    <h3 style={{ color: '#a78bfa', margin: '0 0 10px 0', fontSize: '0.9rem' }}>CPU Usage</h3>
+                                                    <div style={{ fontSize: '1.5em', fontWeight: 'bold', color: '#fff' }}>{lastData ? `${lastData.cpu_usage}%` : '...'}</div>
+                                                </div>
+                                                <div className="stat-card" style={{ background: 'rgba(245, 158, 11, 0.1)', border: '1px solid #f59e0b', padding: '15px', borderRadius: '8px' }}>
+                                                    <h3 style={{ color: '#fbbf24', margin: '0 0 10px 0', fontSize: '0.9rem' }}>RAM Usage</h3>
+                                                    <div style={{ fontSize: '1.5em', fontWeight: 'bold', color: '#fff' }}>{lastData ? `${lastData.ram_usage}%` : '...'}</div>
+                                                </div>
+                                                <div className="stat-card" style={{ background: 'rgba(16, 185, 129, 0.1)', border: '1px solid #10b981', padding: '15px', borderRadius: '8px' }}>
+                                                    <h3 style={{ color: '#34d399', margin: '0 0 10px 0', fontSize: '0.9rem' }}>Disk Usage</h3>
+                                                    <div style={{ fontSize: '1.5em', fontWeight: 'bold', color: '#fff' }}>{lastData ? `${lastData.disk_usage || 0}%` : '...'}</div>
+                                                </div>
+                                            </div>
+                                        )
+                                    }
+
+                                    switch (device.type) {
+                                        case 'Server':
+                                            return (
+                                                <div className="stats-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '15px', marginBottom: '20px' }}>
+                                                    <div className="stat-card" style={{ background: 'rgba(59, 130, 246, 0.1)', border: '1px solid #3b82f6', padding: '15px', borderRadius: '8px' }}>
+                                                        <h3 style={{ color: '#60a5fa', margin: '0 0 10px 0', fontSize: '0.9rem' }}>Connected Users</h3>
+                                                        <div style={{ fontSize: '1.5em', fontWeight: 'bold', color: '#fff' }}>{lastData ? lastData.connected_users : '...'}</div>
+                                                    </div>
+                                                    <div className="stat-card" style={{ background: 'rgba(236, 72, 153, 0.1)', border: '1px solid #ec4899', padding: '15px', borderRadius: '8px' }}>
+                                                        <h3 style={{ color: '#f472b6', margin: '0 0 10px 0', fontSize: '0.9rem' }}>Active Processes</h3>
+                                                        <div style={{ fontSize: '1.5em', fontWeight: 'bold', color: '#fff' }}>{lastData ? lastData.active_processes : '...'}</div>
+                                                    </div>
+                                                    <div className="stat-card" style={{ background: 'rgba(139, 92, 246, 0.1)', border: '1px solid #8b5cf6', padding: '15px', borderRadius: '8px' }}>
+                                                        <h3 style={{ color: '#a78bfa', margin: '0 0 10px 0', fontSize: '0.9rem' }}>CPU Load</h3>
+                                                        <div style={{ fontSize: '1.5em', fontWeight: 'bold', color: '#fff' }}>{lastData ? `${lastData.cpu_usage}%` : '...'}</div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        case 'Actuator':
+                                            return (
+                                                <div className="stats-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '15px', marginBottom: '20px' }}>
+                                                    <div className="stat-card" style={{ background: 'rgba(245, 158, 11, 0.1)', border: '1px solid #f59e0b', padding: '15px', borderRadius: '8px' }}>
+                                                        <h3 style={{ color: '#fbbf24', margin: '0 0 10px 0', fontSize: '0.9rem' }}>Power Usage</h3>
+                                                        <div style={{ fontSize: '1.5em', fontWeight: 'bold', color: '#fff' }}>{lastData ? `${lastData.power_usage} W` : '...'}</div>
+                                                    </div>
+                                                    <div className="stat-card" style={{ background: 'rgba(16, 185, 129, 0.1)', border: '1px solid #10b981', padding: '15px', borderRadius: '8px' }}>
+                                                        <h3 style={{ color: '#34d399', margin: '0 0 10px 0', fontSize: '0.9rem' }}>Status</h3>
+                                                        <div style={{ fontSize: '1.5em', fontWeight: 'bold', color: '#fff' }}>{lastData ? (lastData.status ? 'ON' : 'OFF') : '...'}</div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        case 'Gateway':
+                                            return (
+                                                <div className="stats-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '15px', marginBottom: '20px' }}>
+                                                    <div className="stat-card" style={{ background: 'rgba(59, 130, 246, 0.1)', border: '1px solid #3b82f6', padding: '15px', borderRadius: '8px' }}>
+                                                        <h3 style={{ color: '#60a5fa', margin: '0 0 10px 0', fontSize: '0.9rem' }}>Network In</h3>
+                                                        <div style={{ fontSize: '1.5em', fontWeight: 'bold', color: '#fff' }}>{lastData ? `${lastData.network_in} Mbps` : '...'}</div>
+                                                    </div>
+                                                    <div className="stat-card" style={{ background: 'rgba(16, 185, 129, 0.1)', border: '1px solid #10b981', padding: '15px', borderRadius: '8px' }}>
+                                                        <h3 style={{ color: '#34d399', margin: '0 0 10px 0', fontSize: '0.9rem' }}>Network Out</h3>
+                                                        <div style={{ fontSize: '1.5em', fontWeight: 'bold', color: '#fff' }}>{lastData ? `${lastData.network_out} Mbps` : '...'}</div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        case 'Sensor':
+                                        default:
+                                            return (
+                                                <div className="stats-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '15px', marginBottom: '20px' }}>
+                                                    <div className="stat-card" style={{ background: 'rgba(59, 130, 246, 0.1)', border: '1px solid #3b82f6', padding: '15px', borderRadius: '8px' }}>
+                                                        <h3 style={{ color: '#60a5fa', margin: '0 0 10px 0', fontSize: '0.9rem', textTransform: 'uppercase' }}>Temperature</h3>
+                                                        <div style={{ fontSize: '2em', fontWeight: 'bold', color: '#fff' }}>
+                                                            {lastData ? `${lastData.temperature}°C` : '...'}
+                                                        </div>
+                                                    </div>
+                                                    <div className="stat-card" style={{ background: 'rgba(16, 185, 129, 0.1)', border: '1px solid #10b981', padding: '15px', borderRadius: '8px' }}>
+                                                        <h3 style={{ color: '#34d399', margin: '0 0 10px 0', fontSize: '0.9rem', textTransform: 'uppercase' }}>Humidity</h3>
+                                                        <div style={{ fontSize: '2em', fontWeight: 'bold', color: '#fff' }}>
+                                                            {lastData ? `${lastData.humidity}%` : '...'}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )
+                                    }
+                                })()}
+
+                                <div style={{ width: '100%', height: 250 }}>
+                                    <ResponsiveContainer>
+                                        <LineChart data={deviceSpecificData}>
+                                            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
+                                            <XAxis dataKey="time" stroke="#94a3b8" fontSize={12} tickLine={false} />
+                                            <YAxis stroke="#94a3b8" fontSize={12} tickLine={false} />
+                                            <Tooltip contentStyle={{ backgroundColor: 'rgba(30, 41, 59, 0.9)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: '#f1f5f9' }} />
+                                            <Legend wrapperStyle={{ paddingTop: '10px' }} />
+
+                                            {(() => {
+                                                if (device.city === 'Local') {
+                                                    return (
+                                                        <>
+                                                            <Line type="monotone" dataKey="cpu_usage" stroke="#8b5cf6" strokeWidth={2} dot={false} activeDot={{ r: 6 }} name="CPU (%)" />
+                                                            <Line type="monotone" dataKey="ram_usage" stroke="#f59e0b" strokeWidth={2} dot={false} name="RAM (%)" />
+                                                            <Line type="monotone" dataKey="disk_usage" stroke="#10b981" strokeWidth={2} dot={false} name="Disk (%)" />
+                                                        </>
+                                                    )
+                                                }
+                                                switch (device.type) {
+                                                    case 'Server':
+                                                        return (
+                                                            <>
+                                                                <Line type="monotone" dataKey="connected_users" stroke="#3b82f6" strokeWidth={2} dot={false} name="Users" />
+                                                                <Line type="monotone" dataKey="active_processes" stroke="#ec4899" strokeWidth={2} dot={false} name="Processes" />
+                                                            </>
+                                                        )
+                                                    case 'Actuator':
+                                                        return (
+                                                            <>
+                                                                <Line type="monotone" dataKey="power_usage" stroke="#f59e0b" strokeWidth={2} dot={false} name="Power (W)" />
+                                                                <Line type="step" dataKey="status" stroke="#10b981" strokeWidth={2} dot={false} name="State (1=ON)" />
+                                                            </>
+                                                        )
+                                                    case 'Gateway':
+                                                        return (
+                                                            <>
+                                                                <Line type="monotone" dataKey="network_in" stroke="#3b82f6" strokeWidth={2} dot={false} name="Net In (Mbps)" />
+                                                                <Line type="monotone" dataKey="network_out" stroke="#10b981" strokeWidth={2} dot={false} name="Net Out (Mbps)" />
+                                                            </>
+                                                        )
+                                                    case 'Sensor':
+                                                    default:
+                                                        return (
+                                                            <>
+                                                                <Line type="monotone" dataKey="temperature" stroke="#3b82f6" strokeWidth={2} dot={false} activeDot={{ r: 6 }} name="Temp (°C)" />
+                                                                <Line type="monotone" dataKey="humidity" stroke="#10b981" strokeWidth={2} dot={false} name="Humidity (%)" />
+                                                            </>
+                                                        )
+                                                }
+                                            })()}
+                                        </LineChart>
+                                    </ResponsiveContainer>
+                                </div>
+                            </div>
+                        )
+                    })}
                 </div>
             </div>
 
             {/* Weekly Forecast Section */}
             {forecast && forecast.weekly_forecast && (
                 <div className="card" style={{ marginTop: '20px', overflowX: 'auto' }}>
-                    <h2>7-Day Weather Forecast for {selectedDevice ? selectedDevice.city : selectedCity} (Open-Meteo)</h2>
+                    <h2>7-Day Weather Forecast for {focusedDevice ? focusedDevice.city : selectedCity} (Open-Meteo)</h2>
                     <div style={{ display: 'flex', gap: '15px', paddingBottom: '10px' }}>
                         {forecast.weekly_forecast.map((day, index) => (
                             <div key={index} className="weekly-card">
