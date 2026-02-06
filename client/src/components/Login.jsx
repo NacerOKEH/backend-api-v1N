@@ -16,7 +16,7 @@ function Login() {
         setSuccessMsg('');
         setLoading(true);
 
-        const endpoint = isLogin ? '/users/auth' : '/users/add';
+        const endpoint = isLogin ? 'http://172.18.126.18:8000/users/auth' : 'http://172.18.126.18:8000/users/add';
 
         try {
             const response = await fetch(endpoint, {
@@ -135,11 +135,7 @@ function Login() {
                     </span>
                 </div>
 
-                {isLogin && (
-                    <div style={{ marginTop: '1rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                        <p>Demo: admin@admin.com / 1234</p>
-                    </div>
-                )}
+
             </div>
         </div>
     );

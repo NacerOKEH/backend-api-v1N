@@ -6,11 +6,11 @@ import '../App.css'
 
 // Connect to socket only once outside component to avoid multiple connections on re-renders, 
 // OR handle connection inside useEffect carefully.
-const socket = io('http://localhost:8002');
+const socket = io('http://172.18.126.18:8002');
 
 const PREDEFINED_CITIES = [
     "All", "Local", "Fes", "Casablanca", "Rabat", "Marrakech", "Tanger", "Agadir",
-    "Paris", "London", "New York", "Tokyo", "Berlin", "Madrid"
+    "Paris", "London", "New York", "Tokyo", "Berlin", "Madrid", "new delhi"
 ];
 
 const DEVICE_TYPES = ["Sensor", "Actuator", "Server", "Gateway"];
@@ -70,7 +70,7 @@ function Dashboard() {
             longitude: "0"
         }
 
-        fetch('http://localhost:8001/devices/', {
+        fetch('http://172.18.126.18:8001/devices/', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
@@ -88,7 +88,7 @@ function Dashboard() {
         e.stopPropagation()
         if (!window.confirm("Delete this device?")) return
 
-        fetch(`http://localhost:8001/devices/${id}`, { method: 'DELETE' })
+        fetch(`http://172.18.126.18:8001/devices/${id}`, { method: 'DELETE' })
             .then(() => {
                 setDevices(prev => prev.filter(d => d.device_id !== id))
                 // Remove from selection if deleted
@@ -111,7 +111,7 @@ function Dashboard() {
 
     const handleUpdateDevice = (e) => {
         e.stopPropagation();
-        fetch(`http://localhost:8001/devices/${editingId}`, {
+        fetch(`http://172.18.126.18:8001/devices/${editingId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(editFormData)
@@ -125,7 +125,7 @@ function Dashboard() {
     };
 
     const fetchDevices = (init = false) => {
-        fetch('http://localhost:8001/devices/')
+        fetch('http://172.18.126.18:8001/devices/')
             .then(res => res.json())
             .then(data => {
                 setDevices(data)
@@ -191,7 +191,7 @@ function Dashboard() {
         // Use the most recently selected device's city, or the global selectedCity
         const targetCity = selectedDevices.length > 0 ? selectedDevices[selectedDevices.length - 1].city : selectedCity
         if (targetCity) {
-            fetch(`http://localhost:8002/monitoring/predict/${targetCity}`)
+            fetch(`http://172.18.126.18:8002/monitoring/predict/${targetCity}`)
                 .then(res => res.json())
                 .then(data => setForecast(data))
                 .catch(err => console.error("Forecast error:", err))
